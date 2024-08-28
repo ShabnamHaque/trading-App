@@ -64,14 +64,14 @@ app.post("/order", (req: any, res: any) => {
       price,
       quantity: remainingQty,
     });
-    bids.sort((a, b) => (a.price < b.price ? -1 : 1)); //market maker - wants to buy - increasing
+    bids.sort((a, b) => (a.price < b.price ? -1 : 1)); //market maker - wants to buy - asc order
   } else {
     asks.push({
       userId,
       price,
       quantity: remainingQty,
     });
-    asks.sort((a, b) => (a.price < b.price ? 1 : -1)); // market taker. - decreasing order
+    asks.sort((a, b) => (a.price < b.price ? 1 : -1)); // market taker. - desc order
   }
 
   res.json({
@@ -90,6 +90,7 @@ app.get("/depth", (req: any, res: any) => {
 
   for (let i = 0; i < bids.length; i++) {
     if (!depth[bids[i].price]) {
+      // depth is zero
       // if it doesnot exist
       depth[bids[i].price] = {
         // we create a new entry
@@ -133,6 +134,7 @@ app.get("/quote", (req, res) => {
   // returns the avg price of the trade that is possible for the quote.- bid price - the buyer asks for this price.
   const side = req.body.side;
   let quoteQuantity = req.body.quantity;
+  let orgQuantity = quoteQuantity;
   let val = 0.0;
   if (side == "bid") {
     for (let i = asks.length - 1; i >= 0; i--) {
@@ -141,6 +143,7 @@ app.get("/quote", (req, res) => {
         quoteQuantity -= asks[i].quantity;
       } else if (quoteQuantity < asks[i].quantity) {
         val += asks[i].price * quoteQuantity;
+        quoteQuantity = 0;
         break;
       }
     }
@@ -148,8 +151,11 @@ app.get("/quote", (req, res) => {
 
   //  val = val;
 
-  console.log(`Value of the transaction would be`, val);
-  res.json({ quote: val });
+  console.log(`Value of the transaction would be in average`, val);
+  res.json({
+    quote: val / (orgQuantity - quoteQuantity),
+    quantityAvailable: orgQuantity - quoteQuantity,
+  });
 });
 
 function flipBalance(
@@ -181,8 +187,7 @@ function fillOrders(
       // goes through the entire column at matches at the most optimal qunatity-price combination.
       if (asks[i].price > price) {
         continue;
-      }
-      if (asks[i].quantity > remainingQuantity) {
+      } else if (asks[i].quantity > remainingQuantity) {
         asks[i].quantity -= remainingQuantity;
         flipBalance(asks[i].userId, userId, remainingQuantity, asks[i].price); //(+,- //ask.user,userToBid)
         return 0; // remainingQuantity is zero - enough available shares present to be sold at given bid price.
@@ -196,8 +201,7 @@ function fillOrders(
     for (let i = bids.length - 1; i >= 0; i--) {
       if (bids[i].price < price) {
         continue;
-      }
-      if (bids[i].quantity > remainingQuantity) {
+      } else if (bids[i].quantity > remainingQuantity) {
         bids[i].quantity -= remainingQuantity;
         flipBalance(userId, bids[i].userId, remainingQuantity, price); //market taker-user (+,-)
         return 0;
